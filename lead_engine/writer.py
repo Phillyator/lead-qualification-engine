@@ -131,11 +131,8 @@ ENRICHMENT_COL_WIDTHS = {
 }
 
 
-def write_enrichment_results(workbook_path: str, results: list[dict], config: dict):
-    """Write Pass 2 enrichment results to a new tab in the workbook."""
-    wb = openpyxl.load_workbook(workbook_path)
-    sheet_name = config.get("enrichment", {}).get("output_sheet", "Pass 2 — Enriched")
-
+def _write_enrichment_tab(wb, sheet_name: str, results: list[dict]):
+    """Write a single enrichment tab to the workbook (does not save)."""
     if sheet_name in wb.sheetnames:
         del wb[sheet_name]
 
@@ -194,10 +191,33 @@ def write_enrichment_results(workbook_path: str, results: list[dict], config: di
         out.column_dimensions[get_column_letter(col)].width = width
 
     out.freeze_panes = "A2"
+
+
+def write_enrichment_results(workbook_path: str, results: list[dict], config: dict):
+    """Write Pass 2 enrichment results. Splits into region tabs if configured."""
+    wb = openpyxl.load_workbook(workbook_path)
+    enr = config.get("enrichment", {})
+    rs = enr.get("region_split")
+
+    if rs and rs.get("enabled"):
+        output_sheets = rs.get("output_sheets", {})
+        # Group results by language_region tag
+        groups = {}
+        for r in results:
+            tag = r.get("language_region", rs.get("default", "primary"))
+            groups.setdefault(tag, []).append(r)
+
+        for tag, group_results in groups.items():
+            sheet_name = output_sheets.get(tag, f"Pass 2 — {tag.upper()}")
+            _write_enrichment_tab(wb, sheet_name, group_results)
+    else:
+        sheet_name = enr.get("output_sheet", "Pass 2 — Enriched")
+        _write_enrichment_tab(wb, sheet_name, results)
+
     wb.save(workbook_path)
 
 
-def print_enrichment_summary(results: list[dict]):
+def print_enrichment_summary(results: list[dict], config: dict | None = None):
     """Print Pass 2 enrichment summary to stdout."""
     enriched = [r for r in results if r.get("enrichment_bonus", 0) != 0]
     tiers = {}
@@ -208,6 +228,18 @@ def print_enrichment_summary(results: list[dict]):
     print(f"\nPass 2 — Enriched {len(enriched)} companies (score changed):")
     for tier in ["A — Hot", "B — Warm", "C — Cool", "Disqualified"]:
         print(f"  {tier}: {tiers.get(tier, 0)}")
+
+    # Region counts
+    rs = (config or {}).get("enrichment", {}).get("region_split")
+    if rs and rs.get("enabled"):
+        region_counts = {}
+        for r in results:
+            tag = r.get("language_region", rs.get("default", "primary"))
+            region_counts[tag] = region_counts.get(tag, 0) + 1
+        print(f"\nRegion split:")
+        for tag, count in sorted(region_counts.items()):
+            sheet = rs.get("output_sheets", {}).get(tag, tag.upper())
+            print(f"  {sheet}: {count}")
 
     # Show tier changes
     upgrades = [r for r in results if r.get("pass2_tier") and r.get("tier") and r["pass2_tier"] != r["tier"]]

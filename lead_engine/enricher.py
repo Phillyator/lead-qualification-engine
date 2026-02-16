@@ -1,6 +1,7 @@
 """Pass 2 enrichment — web search + LLM signal extraction for top leads."""
 
 import json
+import re
 import time
 
 from ddgs import DDGS
@@ -135,6 +136,28 @@ def _evaluate_rule(condition: str, signals: dict) -> bool:
     return False
 
 
+def tag_region(company: dict, config: dict) -> str:
+    """Assign a region tag based on keyword matching on name + description + enrichment summary.
+
+    Returns the matching group tag, or the configured default.
+    """
+    rs = config.get("enrichment", {}).get("region_split")
+    if not rs or not rs.get("enabled"):
+        return ""
+
+    text = " ".join(
+        str(company.get(f, "") or "")
+        for f in ("name", "description")
+    ).lower()
+
+    for group in rs.get("groups", []):
+        for kw in group.get("keywords", []):
+            if re.search(r"\b" + re.escape(kw.lower()) + r"\b", text):
+                return group["tag"]
+
+    return rs.get("default", "primary")
+
+
 def enrich_companies(pass1_results: list[dict], config: dict) -> list[dict]:
     """Run Pass 2 enrichment on top companies from Pass 1."""
     from .scorer import assign_tier
@@ -176,7 +199,7 @@ def enrich_companies(pass1_results: list[dict], config: dict) -> list[dict]:
         print(f"  → Bonus: {bonus:+d} ({', '.join(signal_names) or 'none'}) → "
               f"Pass 2 score: {pass2_score} ({pass2_tier})")
 
-        enriched.append({
+        row = {
             **company,
             "enrichment_bonus": bonus,
             "enrichment_signals": signal_names,
@@ -185,14 +208,16 @@ def enrich_companies(pass1_results: list[dict], config: dict) -> list[dict]:
             "search_snippets": "; ".join(r["snippet"][:100] for r in results[:3]),
             "pass2_score": pass2_score,
             "pass2_tier": pass2_tier,
-        })
+        }
+        row["language_region"] = tag_region(row, config)
+        enriched.append(row)
 
         if i < len(to_enrich) - 1:
             time.sleep(delay)
 
     # Add skipped companies (no enrichment, pass-through scores)
     for company in skipped:
-        enriched.append({
+        row = {
             **company,
             "enrichment_bonus": 0,
             "enrichment_signals": [],
@@ -201,7 +226,9 @@ def enrich_companies(pass1_results: list[dict], config: dict) -> list[dict]:
             "search_snippets": "",
             "pass2_score": company["total_score"],
             "pass2_tier": company["tier"],
-        })
+        }
+        row["language_region"] = tag_region(row, config)
+        enriched.append(row)
 
     enriched.sort(key=lambda x: x["pass2_score"], reverse=True)
     return enriched

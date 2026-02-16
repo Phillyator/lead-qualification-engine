@@ -36,10 +36,17 @@ def main():
 
         enriched = enrich_companies(pass1_results, config)
         write_enrichment_results(output_path, enriched, config)
-        print_enrichment_summary(enriched)
+        print_enrichment_summary(enriched, config)
 
-        sheet_name = config.get("enrichment", {}).get("output_sheet", "Pass 2 — Enriched")
-        print(f"\nEnrichment results written to '{sheet_name}' in {output_path}")
+        enr = config.get("enrichment", {})
+        rs = enr.get("region_split")
+        if rs and rs.get("enabled"):
+            sheets = rs.get("output_sheets", {})
+            names = ", ".join(f"'{v}'" for v in sheets.values())
+            print(f"\nEnrichment results written to {names} in {output_path}")
+        else:
+            sheet_name = enr.get("output_sheet", "Pass 2 — Enriched")
+            print(f"\nEnrichment results written to '{sheet_name}' in {output_path}")
 
 
 if __name__ == "__main__":

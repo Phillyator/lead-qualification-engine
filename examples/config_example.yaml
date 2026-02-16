@@ -194,3 +194,15 @@ enrichment:
     - signal: "has_competitor"
       condition: "competitor_tools is not empty"
       points: -5
+
+  # Optional: split enrichment output into region-based tabs.
+  # Uses word-boundary keyword matching on name + description + enrichment summary.
+  # region_split:
+  #   enabled: true
+  #   default: "primary"           # tag for companies that don't match any group
+  #   groups:
+  #     - tag: "secondary"
+  #       keywords: []             # add region-specific terms here
+  #   output_sheets:
+  #     primary: "Pass 2 — Primary"
+  #     secondary: "Pass 2 — Secondary"
