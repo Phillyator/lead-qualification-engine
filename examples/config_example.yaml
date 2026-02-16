@@ -163,3 +163,34 @@ tiers:
     min_score: 25
   - name: "Disqualified"
     min_score: 0
+
+# --- Pass 2: Web Enrichment (optional) ---
+# Uses DuckDuckGo search + Claude LLM to extract real-world signals.
+# Requires: ANTHROPIC_API_KEY env var, duckduckgo-search and anthropic packages.
+enrichment:
+  output_sheet: "Pass 2 — Enriched"
+  top_n: 50                    # only enrich top N from Pass 1
+  search_query_template: '"{name}" locations employees HR'
+  search_max_results: 5
+  search_delay_seconds: 2
+  llm_model: "claude-haiku-4-5-20251001"
+  bonus_cap: 20
+  bonus_rules:
+    - signal: "multi_location"
+      condition: "num_locations >= 3"
+      points: 5
+    - signal: "negative_sentiment"
+      condition: "employee_sentiment == negative"
+      points: 5
+    - signal: "hr_initiatives"
+      condition: "hr_initiatives == true"
+      points: 5
+    - signal: "decentralized"
+      condition: "decentralized == true"
+      points: 3
+    - signal: "no_competitor"
+      condition: "competitor_tools is empty"
+      points: 3
+    - signal: "has_competitor"
+      condition: "competitor_tools is not empty"
+      points: -5

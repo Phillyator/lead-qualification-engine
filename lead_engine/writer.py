@@ -111,3 +111,117 @@ def print_summary(results: list[dict]):
         print(f"\nFlagged companies ({len(flagged)}):")
         for r in flagged:
             print(f"  {r['total_score']:3d} | {r['name']:45s} | {', '.join(r['flags'])}")
+
+
+# --- Pass 2 Enrichment Output ---
+
+ENRICHMENT_HEADERS = [
+    "Rank", "Company Name", "Industry", "Industry Tier",
+    "# Employees", "Size Score", "Industry Score", "Keyword Score",
+    "Pass 1 Score", "Enrichment Bonus", "Pass 2 Score", "Pass 2 Tier",
+    "Enrichment Signals", "Enrichment Summary",
+    "Keyword Signals", "Flags", "Search Snippets",
+    "Website", "LinkedIn URL", "Short Description",
+]
+
+ENRICHMENT_COL_WIDTHS = {
+    1: 6, 2: 40, 3: 30, 4: 8, 5: 12, 6: 10, 7: 12, 8: 12,
+    9: 10, 10: 14, 11: 10, 12: 14, 13: 40, 14: 60,
+    15: 45, 16: 25, 17: 60, 18: 30, 19: 45, 20: 60,
+}
+
+
+def write_enrichment_results(workbook_path: str, results: list[dict], config: dict):
+    """Write Pass 2 enrichment results to a new tab in the workbook."""
+    wb = openpyxl.load_workbook(workbook_path)
+    sheet_name = config.get("enrichment", {}).get("output_sheet", "Pass 2 — Enriched")
+
+    if sheet_name in wb.sheetnames:
+        del wb[sheet_name]
+
+    out = wb.create_sheet(sheet_name)
+
+    # Headers
+    for col, header in enumerate(ENRICHMENT_HEADERS, 1):
+        cell = out.cell(row=1, column=col, value=header)
+        cell.font = HEADER_FONT
+        cell.fill = HEADER_FILL
+        cell.alignment = Alignment(horizontal="center")
+
+    # Data
+    rank = 0
+    for i, r in enumerate(results):
+        row_num = i + 2
+        p2_tier = r.get("pass2_tier", r.get("tier", ""))
+        if p2_tier != "Disqualified":
+            rank += 1
+            display_rank = rank
+        else:
+            display_rank = "—"
+
+        values = [
+            display_rank,
+            r["name"],
+            r.get("industry", ""),
+            r.get("industry_tier", ""),
+            r.get("employees_num"),
+            r.get("size_score", 0),
+            r.get("industry_score", 0),
+            r.get("keyword_score", 0),
+            r.get("total_score", 0),
+            r.get("enrichment_bonus", 0),
+            r.get("pass2_score", r.get("total_score", 0)),
+            p2_tier,
+            ", ".join(r.get("enrichment_signals", [])) or "—",
+            r.get("enrichment_summary", "") or "—",
+            ", ".join(r.get("keyword_signals", [])) if r.get("keyword_signals") else "—",
+            ", ".join(r.get("flags", [])) if r.get("flags") else "—",
+            (r.get("search_snippets", "") or "")[:300],
+            r.get("website", ""),
+            r.get("linkedin", ""),
+            (r.get("description", "") or "")[:200],
+        ]
+
+        fill = TIER_FILLS.get(p2_tier)
+        for col, val in enumerate(values, 1):
+            cell = out.cell(row=row_num, column=col, value=val)
+            cell.border = THIN_BORDER
+            if fill and col in (11, 12):
+                cell.fill = fill
+
+    # Column widths
+    for col, width in ENRICHMENT_COL_WIDTHS.items():
+        out.column_dimensions[get_column_letter(col)].width = width
+
+    out.freeze_panes = "A2"
+    wb.save(workbook_path)
+
+
+def print_enrichment_summary(results: list[dict]):
+    """Print Pass 2 enrichment summary to stdout."""
+    enriched = [r for r in results if r.get("enrichment_bonus", 0) != 0]
+    tiers = {}
+    for r in results:
+        t = r.get("pass2_tier", r.get("tier", "Unknown"))
+        tiers[t] = tiers.get(t, 0) + 1
+
+    print(f"\nPass 2 — Enriched {len(enriched)} companies (score changed):")
+    for tier in ["A — Hot", "B — Warm", "C — Cool", "Disqualified"]:
+        print(f"  {tier}: {tiers.get(tier, 0)}")
+
+    # Show tier changes
+    upgrades = [r for r in results if r.get("pass2_tier") and r.get("tier") and r["pass2_tier"] != r["tier"]]
+    if upgrades:
+        print(f"\nTier changes ({len(upgrades)}):")
+        for r in upgrades:
+            direction = "↑" if r["pass2_score"] > r["total_score"] else "↓"
+            print(f"  {direction} {r['name']:45s} | {r['tier']} → {r['pass2_tier']} "
+                  f"({r['total_score']} → {r['pass2_score']})")
+
+    print(f"\nTop 20 (Pass 2):")
+    for r in results[:20]:
+        bonus = r.get("enrichment_bonus", 0)
+        bonus_str = f" ({bonus:+d})" if bonus else ""
+        signals = ", ".join(r.get("enrichment_signals", [])) or "none"
+        print(f"  {r.get('pass2_score', r['total_score']):3d}{bonus_str:>6s} | "
+              f"{r.get('pass2_tier', r['tier']):10s} | {r['name']:45s} | {signals}")

@@ -3,26 +3,43 @@
 import argparse
 from .config import load_config
 from .scorer import read_companies, score_companies
-from .writer import write_results, print_summary
+from .writer import write_results, write_enrichment_results, print_summary, print_enrichment_summary
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Lead Qualification Engine — Pass 1 Scorer")
+    parser = argparse.ArgumentParser(description="Lead Qualification Engine")
     parser.add_argument("--config", required=True, help="Path to YAML config file")
     parser.add_argument("--input", required=True, help="Path to input xlsx workbook")
     parser.add_argument("--output", help="Path to output xlsx (defaults to modifying input file in-place)")
+    parser.add_argument("--mode", choices=["pass1", "pass2"], default="pass1",
+                        help="Run mode: pass1 (scoring) or pass2 (web enrichment)")
     args = parser.parse_args()
 
     config = load_config(args.config)
     output_path = args.output or args.input
 
-    companies = read_companies(args.input, config)
-    print(f"Read {len(companies)} companies from '{config['input']['sheet_name']}'")
+    if args.mode == "pass1":
+        companies = read_companies(args.input, config)
+        print(f"Read {len(companies)} companies from '{config['input']['sheet_name']}'")
 
-    results = score_companies(companies, config)
-    write_results(output_path, results, config)
-    print_summary(results)
-    print(f"\nResults written to '{config['output']['sheet_name']}' in {output_path}")
+        results = score_companies(companies, config)
+        write_results(output_path, results, config)
+        print_summary(results)
+        print(f"\nResults written to '{config['output']['sheet_name']}' in {output_path}")
+
+    elif args.mode == "pass2":
+        from .enricher import enrich_companies
+        from .scorer import read_pass1_results
+
+        pass1_results = read_pass1_results(args.input, config)
+        print(f"Read {len(pass1_results)} Pass 1 results from '{config['output']['sheet_name']}'")
+
+        enriched = enrich_companies(pass1_results, config)
+        write_enrichment_results(output_path, enriched, config)
+        print_enrichment_summary(enriched)
+
+        sheet_name = config.get("enrichment", {}).get("output_sheet", "Pass 2 — Enriched")
+        print(f"\nEnrichment results written to '{sheet_name}' in {output_path}")
 
 
 if __name__ == "__main__":

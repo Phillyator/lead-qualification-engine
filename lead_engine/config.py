@@ -29,3 +29,11 @@ def _validate_config(config: dict):
 
     if "categories" not in config["keyword_signals"]:
         raise ValueError("keyword_signals must contain 'categories'")
+
+    # Validate enrichment section if present
+    if "enrichment" in config:
+        enr = config["enrichment"]
+        if "search_query_template" not in enr:
+            raise ValueError("enrichment must contain 'search_query_template'")
+        if "bonus_rules" not in enr:
+            raise ValueError("enrichment must contain 'bonus_rules'")

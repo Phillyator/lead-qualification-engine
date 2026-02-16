@@ -131,3 +131,44 @@ def score_companies(companies: list[dict], config: dict) -> list[dict]:
 
     results.sort(key=lambda x: x["total_score"], reverse=True)
     return results
+
+
+def read_pass1_results(workbook_path: str, config: dict) -> list[dict]:
+    """Read Pass 1 scored results from the output sheet."""
+    wb = openpyxl.load_workbook(workbook_path, data_only=True)
+    sheet_name = config["output"]["sheet_name"]
+    ws = wb[sheet_name]
+
+    # Read header row to map column names to indices
+    headers = [cell.value for cell in ws[1]]
+    col_map = {h: i for i, h in enumerate(headers) if h}
+
+    results = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        name = row[col_map["Company Name"]] if "Company Name" in col_map else None
+        if not name:
+            continue
+
+        tier = row[col_map.get("Tier", 9)] if "Tier" in col_map else ""
+        total_score = row[col_map.get("Total Score", 8)] if "Total Score" in col_map else 0
+
+        results.append({
+            "name": name,
+            "industry": row[col_map.get("Industry", 2)] or "",
+            "industry_tier": row[col_map.get("Industry Tier", 3)] or "",
+            "employees_num": row[col_map.get("# Employees", 4)],
+            "size_score": row[col_map.get("Size Score", 5)] or 0,
+            "industry_score": row[col_map.get("Industry Score", 6)] or 0,
+            "keyword_score": row[col_map.get("Keyword Score", 7)] or 0,
+            "total_score": total_score or 0,
+            "tier": tier or "",
+            "keyword_signals": (row[col_map.get("Keyword Signals", 10)] or "").split(", ") if row[col_map.get("Keyword Signals", 10)] and row[col_map.get("Keyword Signals", 10)] != "—" else [],
+            "flags": (row[col_map.get("Flags", 11)] or "").split(", ") if row[col_map.get("Flags", 11)] and row[col_map.get("Flags", 11)] != "—" else [],
+            "disqualify_reason": row[col_map.get("Disqualify Reason", 12)] if "Disqualify Reason" in col_map else "",
+            "website": row[col_map.get("Website", 13)] or "",
+            "linkedin": row[col_map.get("LinkedIn URL", 14)] or "",
+            "description": row[col_map.get("Short Description", 15)] or "",
+        })
+
+    wb.close()
+    return results
