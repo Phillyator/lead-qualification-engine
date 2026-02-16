@@ -1,11 +1,12 @@
 # Lead Qualification Engine — Example Configuration
+# This is a generic example for a B2B SaaS company selling to mid-market.
 # Copy this file and adapt it to your ICP.
 
 # --- Input / Output ---
 input:
-  sheet_name: "Track 2 — Qualification Backlog"
-  header_row: 2             # 1-indexed row number containing column headers
-  data_start_row: 3         # 1-indexed row number where data begins
+  sheet_name: "Leads"
+  header_row: 1             # 1-indexed row number containing column headers
+  data_start_row: 2         # 1-indexed row number where data begins
   columns:
     company_name: 0         # 0-indexed column positions
     industry: 1
@@ -19,178 +20,140 @@ input:
     employee_bucket: 9
 
 output:
-  sheet_name: "Pass 1 — Scored"
+  sheet_name: "Scored Leads"
 
-# --- Size Scoring (0–40 points) ---
+# --- Size Scoring ---
+# Define employee brackets and point values.
+# Companies below min_employees are disqualified.
 size_scoring:
-  min_employees: 200        # below this = disqualified
+  min_employees: 100
   brackets:
+    - max: 250
+      points: 10
     - max: 500
-      points: 15
-    - max: 1000
-      points: 25
-    - max: 3000
+      points: 20
+    - max: 2000
       points: 40            # sweet spot
     - max: 999999
-      points: 30            # enterprise — longer sales cycles
+      points: 25            # enterprise — longer sales cycles
 
 # --- Industry Tiering ---
+# Map industries to tiers with point values.
+# Use the exact industry strings from your spreadsheet.
+# Set points to null to disqualify an industry entirely.
+# Any industry not listed falls back to default_tier / default_points.
 industry_tiers:
   A:
     points: 35
     industries:
-      - "2. Hospital & Health Care"
-      - "10. Environmental, Social"
-      - "3. Gov. Admin"
-      - "8. Pharma"
+      - "Technology"
+      - "Financial Services"
+      - "Healthcare"
   B:
     points: 25
     industries:
-      - "5. IT Services"
-      - "7. Banking"
-      - "4. Research, Education"
-      - "9. Mgmt Consulting"
+      - "Manufacturing"
+      - "Professional Services"
+      - "Education"
   C:
     points: 10
     industries:
-      - "12. Nonprofit, Philanthropy"
-      - "14. Automotive"
-      - "15. Luxury"
-      - "11. Real Estate"
-      - "13. Sports"
-      - "6. Telecom"
+      - "Retail"
+      - "Hospitality"
+      - "Media"
   OUT:
-    points: null             # disqualify
+    points: null
     industries:
-      - "20. Treuhand"
+      - "Government"         # example: exclude if you can't sell to gov
 
   default_tier: "C"
   default_points: 10
 
 # --- Keyword Signals ---
+# Scan company description and keywords for ICP-aligned signals.
+# Each category awards its full point value if ANY term matches (substring match).
+# Total keyword score is capped at the cap value.
 keyword_signals:
-  cap: 25                    # max keyword score
+  cap: 25
 
   categories:
-    - name: "Decentralized / Multi-site"
+    - name: "Multi-site / Distributed"
       points: 8
       terms:
-        - standorte
         - locations
-        - dezentral
         - offices
         - branches
-        - filial
-        - regional
-        - cantonal
-        - kantonal
-        - sites
-        - niederlassungen
-        - "global presence"
+        - distributed
+        - remote
+        - global
         - worldwide
-        - countries
-        - länder
+        - regional
 
-    - name: "People-dependent / Skilled workforce"
+    - name: "Growth signals"
       points: 5
       terms:
-        - fachkräfte
-        - skilled
-        - talent
-        - expertise
-        - "knowledge workers"
-        - spezialist
-        - professionals
-        - fachexperten
-        - "highly qualified"
-        - engineers
-        - wissenschaft
-        - researchers
+        - "series b"
+        - "series c"
+        - "rapid growth"
+        - expanding
+        - scaling
+        - hiring
 
-    - name: "Complex operations"
+    - name: "Tech-forward"
       points: 4
       terms:
-        - complex
-        - matrix
+        - saas
+        - cloud
+        - digital transformation
+        - automation
+        - platform
+        - api
+
+    - name: "Complex org"
+      points: 4
+      terms:
+        - enterprise
         - divisions
-        - departments
-        - abteilungen
-        - operations
         - subsidiaries
-        - tochtergesellschaft
         - "business units"
-        - group
+        - matrix
 
-    - name: "Transformation / Change"
+    - name: "Pain indicators"
       points: 4
       terms:
-        - transformation
-        - change
-        - innovation
-        - digital
-        - modernization
-        - agile
-        - zukunft
-        - strateg
-        - "new ways of working"
-
-    - name: "Employer-side care pain"
-      points: 4
-      terms:
-        - patient
-        - pflege
-        - nursing
-        - klinik
-        - spital
-        - hospital
-        - rehabilitation
-        - betreuung
-        - pflegepersonal
-        - gesundheitsversorgung
+        - turnover
+        - retention
+        - burnout
+        - engagement
+        - satisfaction
 
 # --- Conditional Signals ---
-# These only apply when industry matches a condition
+# These only apply when the industry matches a condition.
+# Use exclude_if_category_matched to avoid double-counting.
 conditional_signals:
-  - name: "Pharma product (not employer pain)"
+  - name: "Healthcare product (not employer pain)"
     condition:
-      industry_contains: "Pharma"
-      exclude_if_category_matched: "Employer-side care pain"
+      industry_contains: "Healthcare"
+      exclude_if_category_matched: "Pain indicators"
     points: 2
     terms:
       - pharmaceutical
-      - drug
-      - "clinical trial"
-      - "clinical research"
-      - cdmo
-      - "active pharmaceutical"
-      - api
-      - biopharmaceutical
-      - "drug development"
-      - commercialization
-      - immunotherapy
-      - allergen
-      - peptide
-      - oligonucleotide
+      - clinical
+      - medical device
+      - biotech
 
 # --- Flags & Penalties ---
+# Flag companies that match certain patterns. Applies a score penalty.
 flags:
-  - name: "Federal (already covered)"
+  - name: "Already a customer"
     condition:
-      industry_contains: "Gov"
-    penalty: 10
+      industry_contains: ""   # applies to all industries — leave empty
+    penalty: 100              # effectively disqualifies
     terms:
-      - federal
-      - bundesamt
-      - eidgenössisch
-      - bund
-      - fdfa
-      - bundesrat
-      - confederation
-      - "swiss government"
-      - "federal office"
-      - "federal department"
+      - "existing customer"   # would need to be in the description
 
 # --- Tier Thresholds ---
+# Ordered from highest to lowest. First match wins.
 tiers:
   - name: "A — Hot"
     min_score: 80
